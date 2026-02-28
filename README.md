@@ -153,7 +153,6 @@ O Terraform gerencia exclusivamente os recursos **Microsoft Azure**. A configura
 
 ## 👤 Autor
 
-**Bruno Castel** — Cloud Engineer | Azure AZ-104
-[LinkedIn](https://linkedin.com/in/brunocastel)
+**Bruno Castel**
 
 > Este projeto é uma simulação para fins de portfólio e aprendizado. Dados e nomes de clientes são fictícios.
