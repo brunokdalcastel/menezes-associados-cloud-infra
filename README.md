@@ -18,7 +18,7 @@ Escritório de advocacia operando com servidor físico legado, arquivos comparti
 
 ## 🏗️ Arquitetura
 
-![Arquitetura](docs/menezes-arquitetura_4.png)
+<img src="docs/menezes-arquitetura_4.png" alt="Arquitetura" width="827"/>
 
 ### Decisões técnicas
 
