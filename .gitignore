@@ -1,10 +1,49 @@
-# Terraform
-.terraform/
-.terraform.lock.hcl
+# ==============================================================================
+# .gitignore — Menezes & Associados Cloud Infrastructure
+# ==============================================================================
+#
+# Regra fundamental: NUNCA versionar arquivos que contenham:
+#   - Credenciais ou segredos (senhas, client secrets, connection strings)
+#   - State do Terraform (contém metadados sensíveis dos recursos)
+#   - Arquivos binários temporários gerados pelo Terraform
+# ==============================================================================
+
+# ==============================================================================
+# TERRAFORM — State Files
+#
+# terraform.tfstate pode incluir valores sensíveis como connection strings,
+# IPs privados e outros metadados dos recursos Azure.
+# Use sempre backend remoto (Azure Storage Account) em produção.
+# ==============================================================================
+
 *.tfstate
+*.tfstate.*
 *.tfstate.backup
+
+# ==============================================================================
+# TERRAFORM — Diretório de Trabalho
+#
+# .terraform/ é criado pelo terraform init — contém providers (~50-200MB),
+# cache de módulos e configuração do backend. Específico de OS/arch.
+# Regenerado automaticamente via terraform init.
+# ==============================================================================
+
+.terraform/
+
+# Nota: .terraform.lock.hcl DEVE ser versionado (garante versões consistentes)
+# Removido da lista de ignore para ser rastreado pelo git
+# .terraform.lock.hcl  ← NÃO ignorar
+
+# ==============================================================================
+# TERRAFORM — Plans e Temporários
+# ==============================================================================
+
+# Plans binários (terraform plan -out) — podem conter valores sensíveis
+tfplan
 *.tfplan
-terraform.tfvars
+*.plan
+
+# Override files — usados para sobrescrever config localmente (não compartilhável)
 override.tf
 override.tf.json
 *_override.tf
@@ -12,18 +51,76 @@ override.tf.json
 .terraformrc
 terraform.rc
 
-# Credenciais e segredos
-*.pem
-*.key
-*.pfx
-*.env
-.env*
+# ==============================================================================
+# VARIÁVEIS SENSÍVEIS
+#
+# *.tfvars pode conter URLs, IDs de tenant, client IDs, senhas, etc.
+# NUNCA versionar — use *.tfvars.example para documentar o formato esperado.
+# ==============================================================================
 
-# OS
+*.tfvars
+
+# Exceção: arquivos de exemplo SÃO versionados (documentam o formato sem dados reais)
+!*.tfvars.example
+
+# ==============================================================================
+# LOGS
+# ==============================================================================
+
+*.log
+*.log.*
+
+# ==============================================================================
+# SISTEMA OPERACIONAL
+# ==============================================================================
+
+# macOS
 .DS_Store
-Thumbs.db
+.AppleDouble
 
-# IDE
+# Windows
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# ==============================================================================
+# EDITORES E IDEs
+# ==============================================================================
+
 .vscode/
 .idea/
 *.swp
+*.swo
+
+# ==============================================================================
+# SEGREDOS E CREDENCIAIS
+# ==============================================================================
+
+# Certificados e chaves privadas
+*.pem
+*.key
+*.pfx
+*.p12
+*.crt
+*.cer
+
+# Variáveis de ambiente
+.env
+.env.*
+!.env.example
+
+# Credenciais de ferramentas cloud
+credentials.json
+service-account*.json
+.azure/
+
+# ==============================================================================
+# TEMPORÁRIOS
+# ==============================================================================
+
+*.tmp
+*.temp
+*.bak

@@ -1,0 +1,83 @@
+# ==============================================================================
+# terraform.tfvars.example — Valores de Exemplo para o Ambiente Menezes
+# ==============================================================================
+#
+# ATENÇÃO: Este arquivo é um EXEMPLO e pode ser versionado com segurança.
+#          Nunca versione terraform.tfvars com valores reais (está no .gitignore).
+#
+# Como usar:
+#   cp terraform.tfvars.example terraform.tfvars
+#   # Edite terraform.tfvars com os valores reais do cliente
+#   terraform plan -var-file=terraform.tfvars
+#
+# Alternativa para CI/CD (sem arquivo local):
+#   Defina variáveis de ambiente com prefixo TF_VAR_:
+#   export TF_VAR_sharepoint_url="https://menezesassociados.sharepoint.com/sites/juridico"
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Ambiente e Região
+# ------------------------------------------------------------------------------
+
+environment = "prod"
+location    = "brazilsouth" # Região preferencial para clientes BR — compliance LGPD
+
+# ------------------------------------------------------------------------------
+# Tags de Governança
+# Aplicadas a TODOS os recursos — essencial para Cost Management e auditoria
+# ------------------------------------------------------------------------------
+
+tags = {
+  environment = "prod"
+  project     = "menezes-associados"
+  managed_by  = "terraform"
+  cost_center = "juridico"
+  owner       = "ti@menezesassociados.com.br"
+}
+
+# ------------------------------------------------------------------------------
+# Resource Group
+# Convenção CAF: rg-{workload}-{env}-{region}-{seq}
+# ------------------------------------------------------------------------------
+
+resource_group_name = "rg-menezes-prod-brazilsouth-001"
+
+# ------------------------------------------------------------------------------
+# Storage Account
+# Deve ser globalmente único no Azure — verifique disponibilidade antes de aplicar:
+#   az storage account check-name --name stmenezesprod001
+# ------------------------------------------------------------------------------
+
+storage_account_name = "stmenezesprod001"
+
+# ------------------------------------------------------------------------------
+# Azure Files — Histórico Jurídico (montado como Z:\)
+# ------------------------------------------------------------------------------
+
+file_share_name  = "historico-juridico"
+file_share_quota = 2048 # 2 TB em GB — margem para 1.6 TB atual + crescimento
+
+# ------------------------------------------------------------------------------
+# Blob Storage — Backup Semanal
+# Tier Archive configurado automaticamente via Lifecycle Policy
+# Retenção: 90 dias (configurado no módulo storage)
+# ------------------------------------------------------------------------------
+
+backup_container_name = "backup-semanal"
+
+# ------------------------------------------------------------------------------
+# Azure Automation
+# Convenção CAF: aa-{workload}-{env}-{region}-{seq}
+# ------------------------------------------------------------------------------
+
+automation_account_name = "aa-menezes-prod-brazilsouth-001"
+
+# SharePoint Online — URL do site jurídico
+# Substitua pelo tenant e site reais do cliente
+sharepoint_url     = "https://menezesassociados.sharepoint.com/sites/juridico"
+sharepoint_doc_lib = "Documentos"
+
+# Schedule: data de início para o 1º job do mês (deve ser futura)
+# Formato: ISO 8601 com timezone UTC
+# 2026-04-01T02:00:00+00:00 = 1º de abril de 2026 às 02h UTC (23h BRT, 31/03)
+schedule_start_time = "2026-04-01T02:00:00+00:00"

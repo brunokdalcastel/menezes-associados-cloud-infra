@@ -37,26 +37,31 @@ Escritório de advocacia operando com servidor físico legado, arquivos comparti
 
 ```
 menezes-associados-cloud-infra/
+├── .github/
+│   └── workflows/
+│       ├── terraform-plan.yml      # CI: plan automático em Pull Requests
+│       └── terraform-apply.yml     # CD: apply automático após merge na main
 ├── docs/
-│   └── menezes-arquitetura.png     # Diagrama de arquitetura
+│   └── menezes-arquitetura_4.png  # Diagrama de arquitetura
 ├── modules/
-│   ├── storage/                    # Azure Files + Blob Archive
+│   ├── storage/                    # Resource Group, Storage Account, Azure Files, Blob + Lifecycle
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf
-│   └── automation/                 # Azure Automation + Runbook
+│   └── automation/                 # Automation Account, Runbook, Schedule, Role Assignments
 │       ├── main.tf
 │       ├── variables.tf
 │       └── outputs.tf
 ├── environments/
 │   └── menezes/
-│       ├── main.tf                 # Entry point do ambiente
+│       ├── main.tf                 # Entry point: backend + provider + module calls
 │       ├── variables.tf
 │       └── terraform.tfvars.example
 ├── scripts/
-│   └── tiering-runbook.ps1        # PowerShell — tiering automático mensal
-├── backend.tf                     # State remoto no Azure Storage Account
-├── providers.tf                   # AzureRM provider config
+│   └── tiering-runbook.ps1        # PowerShell — tiering automático mensal via Managed Identity
+├── backend.tf                     # Template de referência — configuração real em environments/menezes/
+├── providers.tf                   # Template de referência — configuração real em environments/menezes/
+├── .gitignore
 └── README.md
 ```
 
@@ -97,19 +102,21 @@ menezes-associados-cloud-infra/
 # 1. Clone o repositório
 git clone https://github.com/brunokdalcastel/lab-azure-advocacia-infra
 
-
-# 2. Configure o backend (Storage Account para o state)
-# Siga as instruções em docs/backend-setup.md
+# 2. Crie o Storage Account para armazenar o state (executar uma única vez)
+# Os comandos estão documentados em backend.tf na raiz do repositório
+az group create --name rg-tfstate-shared-brazilsouth-001 --location brazilsouth
+az storage account create --name sttfstatemenezes001 --resource-group rg-tfstate-shared-brazilsouth-001 --location brazilsouth --sku Standard_LRS --kind StorageV2
+az storage container create --name tfstate --account-name sttfstatemenezes001
 
 # 3. Configure as variáveis
 cp environments/menezes/terraform.tfvars.example environments/menezes/terraform.tfvars
-# Edite o arquivo com seus valores
+# Edite terraform.tfvars com os valores reais (sharepoint_url, storage_account_name, etc.)
 
 # 4. Inicialize e aplique
 cd environments/menezes
 terraform init
-terraform plan
-terraform apply
+terraform plan -var-file=terraform.tfvars
+terraform apply -var-file=terraform.tfvars
 ```
 
 ---
@@ -143,10 +150,14 @@ O Terraform gerencia exclusivamente os recursos **Microsoft Azure**. A configura
 |---|---|
 | Resource Group | Terraform |
 | Storage Account | Terraform |
-| Azure File Share | Terraform |
-| Blob Container | Terraform |
-| Automation Account | Terraform |
-| Runbook PowerShell | Terraform + script externo |
+| Azure File Share (tier Cool) | Terraform |
+| Blob Container (acesso private) | Terraform |
+| Lifecycle Management Policy | Terraform |
+| Automation Account + Managed Identity | Terraform |
+| Runbook PowerShell | Terraform + `scripts/tiering-runbook.ps1` |
+| Schedule + Job Schedule | Terraform |
+| Role Assignments (RBAC) | Terraform |
+| GitHub Actions Workflows | `.github/workflows/` |
 | Entra ID / M365 | Manual — M365 Admin Center |
 
 ---

@@ -1,0 +1,173 @@
+# ==============================================================================
+# terraform-apply.yml — Deploy de Infraestrutura após Merge na Main
+# ==============================================================================
+#
+# Este workflow aplica as mudanças de infraestrutura após um merge na branch main.
+# Representa a etapa de "deploy" do pipeline IaC: código aprovado → infraestrutura criada.
+#
+# Fluxo completo do pipeline IaC:
+#   1. Desenvolvedor abre Pull Request com mudanças .tf
+#   2. terraform-plan.yml executa → comenta resultado no PR
+#   3. Revisor analisa o plan e aprova o PR
+#   4. Merge na main → terraform-apply.yml executa o deploy
+#   (Opcional) 5. GitHub Environment exige aprovação manual antes do apply
+#
+# Segurança:
+#   - OIDC: sem client_secret armazenado nos secrets do repositório
+#   - GitHub Environment "production": permite configurar Required Reviewers
+#     (Settings → Environments → production → Required reviewers)
+#     Isso garante aprovação humana antes de qualquer mudança em produção
+#   - O plan é refeito antes do apply: evita surpresas se o state mudou
+#     entre o PR e o merge
+#
+# Configuração necessária:
+#   Secrets no repositório (Settings → Secrets → Actions):
+#     AZURE_CLIENT_ID       → Client ID do App Registration
+#     AZURE_TENANT_ID       → Tenant ID do Entra ID
+#     AZURE_SUBSCRIPTION_ID → ID da Azure Subscription
+#
+#   Federated Credential no App Registration para este workflow:
+#     Issuer: https://token.actions.githubusercontent.com
+#     Subject: repo:{org}/{repo}:ref:refs/heads/main
+#     Audience: api://AzureADTokenExchange
+#     (Subject diferente do PR workflow — escopo de segurança específico por branch)
+# ==============================================================================
+
+name: "Terraform Apply"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      # Executa apenas quando arquivos relevantes são alterados
+      - "**.tf"
+      - "**.tfvars"
+      - "scripts/**.ps1"  # Runbook alterado também requer apply (Terraform faz upload)
+
+# Permissões mínimas para OIDC — sem permissão de escrita em PRs (não necessário no apply)
+permissions:
+  id-token: write  # Obrigatório para OIDC
+  contents: read    # Leitura do código no checkout
+
+env:
+  TF_WORKING_DIR: "environments/menezes"
+  TF_VERSION: "1.7.5"
+
+jobs:
+  terraform-apply:
+    name: "Terraform Apply"
+    runs-on: ubuntu-latest
+
+    # GitHub Environment "production":
+    #   - Habilita Required Reviewers (aprovação manual antes do apply)
+    #   - Habilita Protection Rules (ex: não aplicar fora do horário comercial)
+    #   - Registra histórico de deploys no GitHub
+    #
+    # Para configurar aprovação manual:
+    #   Settings → Environments → production → Required reviewers → adicionar reviewers
+    environment: production
+
+    defaults:
+      run:
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+    steps:
+      # --------------------------------------------------------------------------
+      # STEP 1: Checkout
+      # --------------------------------------------------------------------------
+      - name: "Checkout do código"
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------------------------------
+      # STEP 2: Setup Terraform
+      # --------------------------------------------------------------------------
+      - name: "Setup Terraform"
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # --------------------------------------------------------------------------
+      # STEP 3: Login no Azure via OIDC
+      #
+      # A Federated Credential para este workflow usa subject diferente do PR:
+      #   PR:    repo:{org}/{repo}:pull_request
+      #   Apply: repo:{org}/{repo}:ref:refs/heads/main
+      #
+      # Isso garante que apenas workflows executados na main branch
+      # tenham permissão para fazer apply na subscription de produção.
+      # --------------------------------------------------------------------------
+      - name: "Login no Azure (OIDC)"
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # --------------------------------------------------------------------------
+      # STEP 4: Terraform Init
+      # Inicializa backend, providers e módulos.
+      # O state remoto é acessado via OIDC — sem chave de acesso do Storage Account.
+      # --------------------------------------------------------------------------
+      - name: "Terraform Init"
+        id: init
+        run: terraform init
+
+      # --------------------------------------------------------------------------
+      # STEP 5: Terraform Plan (pré-apply)
+      #
+      # O plan é executado novamente, mesmo que já tenha rodado no PR.
+      # Motivo: o state pode ter mudado entre a abertura do PR e o merge
+      # (outro apply, mudança manual no portal, etc.)
+      #
+      # -out=tfplan: salva o plan em arquivo binário para o apply usar.
+      # O apply com -auto-approve + arquivo de plan é determinístico —
+      # aplica exatamente o que foi calculado, sem novo cálculo no momento do apply.
+      # --------------------------------------------------------------------------
+      - name: "Terraform Plan"
+        id: plan
+        run: terraform plan -no-color -out=tfplan
+
+      # --------------------------------------------------------------------------
+      # STEP 6: Terraform Apply
+      #
+      # Aplica o plan calculado no step anterior.
+      # -auto-approve: necessário em CI/CD — aprovação humana já foi feita no PR
+      #   e opcionalmente via GitHub Environment Required Reviewers.
+      #
+      # IMPORTANTE: -auto-approve não significa "sem aprovação" —
+      #   a aprovação humana acontece no PR review e no GitHub Environment gate.
+      #   O -auto-approve apenas evita prompt interativo desnecessário em CI.
+      # --------------------------------------------------------------------------
+      - name: "Terraform Apply"
+        id: apply
+        run: terraform apply -auto-approve tfplan
+
+      # --------------------------------------------------------------------------
+      # STEP 7: Outputs pós-apply
+      # Exibe os outputs do Terraform (nomes de recursos criados, endpoints, etc.)
+      # Útil para auditoria no log do workflow e para confirmar o deploy.
+      # continue-on-error: true — não falha o workflow se não houver outputs
+      # --------------------------------------------------------------------------
+      - name: "Terraform Output"
+        run: terraform output -no-color
+        continue-on-error: true
+
+      # --------------------------------------------------------------------------
+      # STEP 8: Sumário do deploy (GitHub Actions Job Summary)
+      # Cria um sumário visual do deploy visível na página do workflow
+      # --------------------------------------------------------------------------
+      - name: "Sumário do Deploy"
+        if: always()
+        run: |
+          echo "## Deploy Terraform — Sumário" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Item | Valor |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Ambiente** | ${{ env.TF_WORKING_DIR }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Terraform** | v${{ env.TF_VERSION }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Commit** | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Autor** | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Status do Apply** | ${{ steps.apply.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> Deploy executado em $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> "$GITHUB_STEP_SUMMARY"

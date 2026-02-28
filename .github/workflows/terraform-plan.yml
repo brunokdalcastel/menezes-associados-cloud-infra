@@ -1,0 +1,257 @@
+# ==============================================================================
+# terraform-plan.yml — Validação de Terraform em Pull Requests
+# ==============================================================================
+#
+# Este workflow é acionado automaticamente em Pull Requests que modificam
+# arquivos Terraform (.tf, .tfvars) ou o próprio workflow.
+#
+# O que este workflow faz:
+#   1. Configura o Terraform CLI na versão pinada
+#   2. Autentica no Azure via OIDC (sem client_secret armazenado)
+#   3. Executa terraform init (inicializa backend e providers)
+#   4. Executa terraform fmt --check (valida formatação do código)
+#   5. Executa terraform validate (valida sintaxe e referências)
+#   6. Executa terraform plan (calcula diff de infraestrutura)
+#   7. Posta o resultado do plan como comentário no PR para revisão
+#
+# Benefício principal: o revisor do PR vê exatamente quais recursos serão
+# criados, modificados ou destruídos — sem precisar rodar o plan localmente.
+#
+# Configuração necessária no repositório:
+#   Settings → Secrets and variables → Actions → New repository secret:
+#     AZURE_CLIENT_ID      → Client ID do App Registration no Entra ID
+#     AZURE_TENANT_ID      → Tenant ID do Microsoft Entra
+#     AZURE_SUBSCRIPTION_ID → ID da Azure Subscription de destino
+#
+#   O App Registration precisa de Federated Credential com:
+#     Issuer: https://token.actions.githubusercontent.com
+#     Subject: repo:{org}/{repo}:pull_request
+#     Audience: api://AzureADTokenExchange
+# ==============================================================================
+
+name: "Terraform Plan"
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      # Executa apenas quando há mudanças em arquivos Terraform
+      # Evita runs desnecessários para mudanças em docs, scripts não-tf, etc.
+      - "**.tf"
+      - "**.tfvars"
+      - "**.tfvars.example"
+      - ".github/workflows/terraform-*.yml"
+
+# Permissões mínimas — princípio do menor privilégio no GitHub Actions
+permissions:
+  id-token: write      # Obrigatório para solicitar o token JWT do GitHub OIDC
+  contents: read        # Leitura do código do repositório no checkout
+  pull-requests: write  # Criar/atualizar o comentário com o resultado do plan
+
+env:
+  # Diretório de trabalho do Terraform (onde está o main.tf do ambiente)
+  TF_WORKING_DIR: "environments/menezes"
+
+  # Versão pinada do Terraform — mudanças de versão devem ser explícitas e revisadas
+  TF_VERSION: "1.7.5"
+
+jobs:
+  terraform-plan:
+    name: "Terraform Plan"
+    runs-on: ubuntu-latest
+
+    # GitHub Environment: permite configurar aprovações manuais e regras de proteção
+    # Settings → Environments → production → Required reviewers
+    environment: production
+
+    # Define o diretório padrão para todos os steps de shell
+    defaults:
+      run:
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+    steps:
+      # --------------------------------------------------------------------------
+      # STEP 1: Checkout
+      # Clona o repositório no runner — necessário para todos os steps seguintes
+      # --------------------------------------------------------------------------
+      - name: "Checkout do código"
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------------------------------
+      # STEP 2: Setup Terraform
+      # Instala o Terraform CLI na versão especificada.
+      # A action oficial da HashiCorp garante o hash SHA verificado.
+      # --------------------------------------------------------------------------
+      - name: "Setup Terraform"
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # --------------------------------------------------------------------------
+      # STEP 3: Login no Azure via OIDC
+      #
+      # Workload Identity Federation:
+      #   1. GitHub gera um token JWT assinado para este workflow específico
+      #   2. A action azure/login troca o token JWT por um access token Azure AD
+      #   3. O Terraform usa o token Azure AD para autenticar nas APIs do Azure
+      #
+      # Vantagem: zero secrets de longa duração — o token JWT expira em minutos
+      # --------------------------------------------------------------------------
+      - name: "Login no Azure (OIDC)"
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # --------------------------------------------------------------------------
+      # STEP 4: Terraform Init
+      # Inicializa o diretório de trabalho:
+      #   - Baixa os providers (azurerm ~> 3.90) do Terraform Registry
+      #   - Configura o backend remoto (Azure Storage Account)
+      #   - Baixa os módulos referenciados (locais, em ../../modules/)
+      # --------------------------------------------------------------------------
+      - name: "Terraform Init"
+        id: init
+        run: terraform init
+
+      # --------------------------------------------------------------------------
+      # STEP 5: Terraform Format Check
+      # Valida se todos os arquivos .tf estão formatados com terraform fmt.
+      # -recursive verifica também os módulos em subdiretórios.
+      # -check retorna exit code 1 se houver diferenças de formatação.
+      #
+      # continue-on-error: true — não bloqueia o workflow, mas reporta no comentário
+      # Isso permite ver o resultado do plan mesmo quando a formatação está errada
+      # --------------------------------------------------------------------------
+      - name: "Terraform Format Check"
+        id: fmt
+        run: terraform fmt -check -recursive -diff
+        continue-on-error: true
+
+      # --------------------------------------------------------------------------
+      # STEP 6: Terraform Validate
+      # Valida a configuração sem acessar APIs remotas ou state:
+      #   - Sintaxe HCL correta
+      #   - Referências a recursos/variáveis existentes
+      #   - Tipos de variáveis corretos
+      # Mais rápido que o plan — falha cedo em erros básicos de configuração
+      # --------------------------------------------------------------------------
+      - name: "Terraform Validate"
+        id: validate
+        run: terraform validate -no-color
+
+      # --------------------------------------------------------------------------
+      # STEP 7: Terraform Plan
+      # Calcula as mudanças necessárias para alcançar o estado desejado:
+      #   - Compara o estado atual (backend) com a configuração desejada (.tf files)
+      #   - Lista recursos a criar (+), destruir (-) e modificar (~)
+      #   - Salva o output em plan_output.txt para o comentário no PR
+      #
+      # -no-color: remove escape codes ANSI — o markdown do PR não renderiza cores
+      # -out=tfplan: salva o plan binário para uso no apply workflow
+      # continue-on-error: true — captura output mesmo em caso de erro do plan
+      # --------------------------------------------------------------------------
+      - name: "Terraform Plan"
+        id: plan
+        run: |
+          terraform plan -no-color -out=tfplan 2>&1 | tee plan_output.txt
+          echo "PLAN_EXIT_CODE=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
+        continue-on-error: true
+
+      # --------------------------------------------------------------------------
+      # STEP 8: Comentário no Pull Request
+      # Posta (ou atualiza) um comentário no PR com o resultado de todos os steps.
+      # Se o bot já comentou anteriormente (re-push ao PR), atualiza o comentário
+      # existente ao invés de criar um novo — mantém o PR limpo.
+      # --------------------------------------------------------------------------
+      - name: "Comentário no PR com resultado do Plan"
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            // Lê o output do plan salvo em arquivo (limita a 60k chars — limite do GitHub)
+            let planOutput = '';
+            try {
+              const fullPath = '${{ env.TF_WORKING_DIR }}/plan_output.txt';
+              planOutput = fs.readFileSync(fullPath, 'utf8').substring(0, 60000);
+            } catch (e) {
+              planOutput = 'Output não disponível.';
+            }
+
+            // Ícones de status para facilitar leitura visual
+            const icon = {
+              success: '✅',
+              failure: '❌',
+              warning: '⚠️',
+            };
+
+            const fmtStatus  = '${{ steps.fmt.outcome }}';
+            const initStatus = '${{ steps.init.outcome }}';
+            const valStatus  = '${{ steps.validate.outcome }}';
+            const planStatus = '${{ steps.plan.outcome }}';
+
+            const body = `## Terraform Plan — Resultado
+
+            | Step | Status |
+            |------|--------|
+            | 🎨 Format \`terraform fmt\`  | ${fmtStatus  === 'success' ? icon.success : icon.warning} \`${fmtStatus}\`  |
+            | ⚙️ Init \`terraform init\`     | ${initStatus === 'success' ? icon.success : icon.failure} \`${initStatus}\` |
+            | 🔍 Validate                   | ${valStatus  === 'success' ? icon.success : icon.failure} \`${valStatus}\`  |
+            | 📋 Plan                        | ${planStatus === 'success' ? icon.success : icon.failure} \`${planStatus}\` |
+
+            <details>
+            <summary>📄 Mostrar Plan Completo (clique para expandir)</summary>
+
+            \`\`\`hcl
+            ${planOutput}
+            \`\`\`
+
+            </details>
+
+            ---
+            *Workflow: \`${{ github.workflow }}\` | Commit: \`${{ github.sha }}\` | Ambiente: \`${{ env.TF_WORKING_DIR }}\`*`;
+
+            // Busca comentário anterior do bot para atualizar (evita spam de comentários)
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(
+              c => c.user.type === 'Bot' && c.body.includes('Terraform Plan — Resultado')
+            );
+
+            if (botComment) {
+              // Atualiza o comentário existente
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body,
+              });
+            } else {
+              // Cria novo comentário
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body,
+              });
+            }
+
+      # --------------------------------------------------------------------------
+      # STEP 9: Falha explícita se o plan falhou
+      # Separado do step de plan (continue-on-error: true) para garantir que
+      # o comentário no PR seja sempre postado antes de falhar o workflow.
+      # --------------------------------------------------------------------------
+      - name: "Verifica resultado do Plan"
+        if: steps.plan.outcome == 'failure'
+        run: |
+          echo "O terraform plan retornou erro. Verifique o output acima e o comentário no PR."
+          exit 1
