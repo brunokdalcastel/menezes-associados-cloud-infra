@@ -18,7 +18,7 @@ Escritório de advocacia operando com servidor físico legado, arquivos comparti
 
 ## 🏗️ Arquitetura
 
-![Arquitetura](docs/menezes-arquitetura.png)
+![Arquitetura](docs/menezes-arquitetura_4.png)
 
 ### Decisões técnicas
 
@@ -79,20 +79,6 @@ menezes-associados-cloud-infra/
 - Terraform — provisionamento de recursos Azure
 - GitHub Actions — pipeline de CI/CD (plan no PR, apply no merge)
 - PowerShell — runbook de tiering
-
----
-
-## 💰 Estimativa de Custos
-
-| Serviço | Custo Mensal |
-|---|---|
-| Microsoft 365 Business Basic (12 usuários) | ~R$ 360 |
-| Azure Files Cool (1.6TB) | ~R$ 80 |
-| Azure Blob Archive (backup) | ~R$ 25 |
-| Azure Automation | ~R$ 20 |
-| **Total** | **~R$ 485/mês** |
-
-> Budget disponível: R$ 800/mês · Margem: R$ 315/mês
 
 ---
 
@@ -168,6 +154,6 @@ O Terraform gerencia exclusivamente os recursos **Microsoft Azure**. A configura
 ## 👤 Autor
 
 **Bruno Castel** — Cloud Engineer | Azure AZ-104
-[LinkedIn](https://linkedin.com/in/brunocastel) · [AzureTar](https://azuretar.com)
+[LinkedIn](https://linkedin.com/in/brunocastel)
 
 > Este projeto é uma simulação para fins de portfólio e aprendizado. Dados e nomes de clientes são fictícios.
