@@ -126,6 +126,9 @@ module "storage" {
   # Blob — Backup Semanal
   backup_container_name = var.backup_container_name
 
+  # Network Security — IPs autorizados (IP do escritório para montagem SMB)
+  allowed_ip_ranges = var.allowed_ip_ranges
+
   # Tags de governança
   tags = var.tags
 }
