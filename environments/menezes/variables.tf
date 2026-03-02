@@ -123,3 +123,18 @@ variable "schedule_start_time" {
   type    = string
   default = "2026-04-01T02:00:00+00:00"
 }
+
+# ------------------------------------------------------------------------------
+# Network Security
+# ------------------------------------------------------------------------------
+
+variable "allowed_ip_ranges" {
+  description = <<-EOT
+    Lista de IPs ou CIDRs públicos autorizados a acessar o Storage Account.
+    Inclua o IP público do escritório para permitir montagem do Azure Files (Z:\).
+    Exemplo: ["200.100.50.30/32"]
+    Deixar vazio ([]) permite apenas Azure Services (Automation Account, etc.).
+  EOT
+  type    = list(string)
+  default = []
+}
