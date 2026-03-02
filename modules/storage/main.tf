@@ -101,6 +101,23 @@ resource "azurerm_storage_account" "main" {
     }
   }
 
+  # --------------------------------------------------------------------------
+  # Network Rules — Restrição de Acesso por Rede (Defesa em Profundidade)
+  #
+  # default_action = "Deny": bloqueia qualquer IP não explicitamente permitido.
+  # bypass "AzureServices": permite que serviços Azure (Automation Account via
+  #   Managed Identity, Azure Monitor, Azure Backup) acessem o storage sem
+  #   precisar estar na lista de IPs.
+  # ip_rules: CIDRs públicos autorizados (ex: IP do escritório para montagem SMB).
+  #   Deixar vazio (default) permite apenas Azure Services.
+  # --------------------------------------------------------------------------
+  network_rules {
+    default_action = "Deny"
+    bypass         = ["AzureServices"]
+    ip_rules       = var.allowed_ip_ranges
+  }
+
+
   tags = var.tags
 }
 
