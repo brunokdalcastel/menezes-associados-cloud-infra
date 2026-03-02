@@ -113,3 +113,28 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# ------------------------------------------------------------------------------
+# Network Security — Controle de Acesso ao Storage Account
+# ------------------------------------------------------------------------------
+
+variable "allowed_ip_ranges" {
+  description = <<-EOT
+    Lista de IPs ou CIDRs públicos autorizados a acessar o Storage Account.
+    Inclua o IP público do escritório para permitir a montagem do Azure Files (Z:\).
+    Azure Services (Automation Account via Managed Identity) sempre têm acesso
+    independente desta lista via bypass = ["AzureServices"].
+    Exemplo: ["200.100.50.30/32", "201.55.100.0/24"]
+    Deixar vazio ([]) restringe o acesso apenas a Azure Services.
+  EOT
+  type    = list(string)
+  default = []
+
+  validation {
+    condition = alltrue([
+      for ip in var.allowed_ip_ranges :
+      can(regex("^([0-9]{1,3}\.){3}[0-9]{1,3}(\/[0-9]{1,2})?$", ip))
+    ])
+    error_message = "Cada entrada em allowed_ip_ranges deve ser um IP válido ou CIDR (ex: 200.100.50.30/32)."
+  }
+}
