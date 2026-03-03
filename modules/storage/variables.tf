@@ -127,13 +127,13 @@ variable "allowed_ip_ranges" {
     Exemplo: ["200.100.50.30/32", "201.55.100.0/24"]
     Deixar vazio ([]) restringe o acesso apenas a Azure Services.
   EOT
-  type    = list(string)
-  default = []
+  type        = list(string)
+  default     = []
 
   validation {
     condition = alltrue([
       for ip in var.allowed_ip_ranges :
-      can(regex("^([0-9]{1,3}\.){3}[0-9]{1,3}(\/[0-9]{1,2})?$", ip))
+      can(regex("^([0-9]{1,3}\\.){3}[0-9]{1,3}(/[0-9]{1,2})?$", ip))
     ])
     error_message = "Cada entrada em allowed_ip_ranges deve ser um IP válido ou CIDR (ex: 200.100.50.30/32)."
   }

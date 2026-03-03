@@ -35,7 +35,7 @@ output "managed_identity_principal_id" {
     Use este ID para configurar permissões adicionais no SharePoint (Graph API):
       az ad app permission add --id <principal_id> --api <graph_app_id> --api-permissions Sites.ReadWrite.All=Role
   EOT
-  value = azurerm_automation_account.main.identity[0].principal_id
+  value       = azurerm_automation_account.main.identity[0].principal_id
 }
 
 output "managed_identity_tenant_id" {
@@ -62,7 +62,7 @@ output "schedule_name" {
   value       = azurerm_automation_schedule.mensal.name
 }
 
-output "schedule_next_run" {
-  description = "Próxima data/hora de execução do schedule (UTC)."
-  value       = azurerm_automation_schedule.mensal.next_run
+output "schedule_start_time" {
+  description = "Data/hora de início do schedule (UTC). O recurso azurerm_automation_schedule não exporta next_run — use start_time como referência do horário configurado."
+  value       = azurerm_automation_schedule.mensal.start_time
 }

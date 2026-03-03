@@ -77,7 +77,9 @@ automation_account_name = "aa-menezes-prod-brazilsouth-001"
 sharepoint_url     = "https://menezesassociados.sharepoint.com/sites/juridico"
 sharepoint_doc_lib = "Documentos"
 
-# Schedule: data de início para o 1º job do mês (deve ser futura)
+# Schedule: data de início para o 1º job do mês
+# ATENÇÃO: o Azure exige que start_time seja SEMPRE uma data futura (mínimo 5 minutos).
+# Atualize este valor para o 1º dia do próximo mês antes de executar terraform apply.
 # Formato: ISO 8601 com timezone UTC
-# 2026-04-01T02:00:00+00:00 = 1º de abril de 2026 às 02h UTC (23h BRT, 31/03)
-schedule_start_time = "2026-04-01T02:00:00+00:00"
+# Exemplo: "2026-05-01T02:00:00+00:00" = 1º de maio de 2026 às 02h UTC (23h BRT, 30/04)
+schedule_start_time = "2026-05-01T02:00:00+00:00"

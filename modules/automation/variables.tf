@@ -54,8 +54,8 @@ variable "runbook_content" {
     Conteúdo completo do script PowerShell para o runbook de tiering.
     Carregado via file() no ambiente: file("../../scripts/tiering-runbook.ps1")
   EOT
-  type      = string
-  sensitive = false # Script não contém credenciais (usa Managed Identity)
+  type        = string
+  sensitive   = false # Script não contém credenciais (usa Managed Identity)
 }
 
 # ------------------------------------------------------------------------------
@@ -94,7 +94,7 @@ variable "file_share_id" {
     Formato: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/
              storageAccounts/{sa}/fileServices/default/shares/{share}
   EOT
-  type = string
+  type        = string
 }
 
 variable "file_share_name" {
@@ -112,8 +112,8 @@ variable "schedule_start_time" {
     Deve ser uma data futura — o dia do mês define o dia recorrente de execução.
     Formato: "2026-04-01T02:00:00+00:00" (02h UTC = 23h BRT do dia anterior)
   EOT
-  type    = string
-  default = "2026-04-01T02:00:00+00:00"
+  type        = string
+  default     = "2026-04-01T02:00:00+00:00"
 }
 
 # ------------------------------------------------------------------------------

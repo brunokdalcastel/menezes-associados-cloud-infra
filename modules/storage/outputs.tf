@@ -75,7 +75,7 @@ output "file_share_resource_manager_id" {
     Usado como scope granular no Role Assignment do módulo automation:
     /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{sa}/fileServices/default/shares/{share}
   EOT
-  value = azurerm_storage_share.historico.resource_manager_id
+  value       = azurerm_storage_share.historico.resource_manager_id
 }
 
 # ------------------------------------------------------------------------------

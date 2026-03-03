@@ -37,7 +37,7 @@ variable "tags" {
       cost_center  → centro de custo para showback/chargeback
       owner        → responsável técnico pelo recurso
   EOT
-  type = map(string)
+  type        = map(string)
   default = {
     environment = "prod"
     project     = "menezes-associados"
@@ -105,7 +105,7 @@ variable "sharepoint_url" {
     Exemplo: "https://menezesassociados.sharepoint.com/sites/juridico"
     Obrigatório: sem default — deve ser fornecido via terraform.tfvars ou TF_VAR_sharepoint_url.
   EOT
-  type = string
+  type        = string
 }
 
 variable "sharepoint_doc_lib" {
@@ -120,8 +120,8 @@ variable "schedule_start_time" {
     Deve ser uma data futura. O dia do mês define o dia de execução recorrente.
     Padrão: 1º de abril de 2026 às 02h UTC (23h BRT do dia 31/03).
   EOT
-  type    = string
-  default = "2026-04-01T02:00:00+00:00"
+  type        = string
+  default     = "2026-04-01T02:00:00+00:00"
 }
 
 # ------------------------------------------------------------------------------
@@ -135,6 +135,6 @@ variable "allowed_ip_ranges" {
     Exemplo: ["200.100.50.30/32"]
     Deixar vazio ([]) permite apenas Azure Services (Automation Account, etc.).
   EOT
-  type    = list(string)
-  default = []
+  type        = list(string)
+  default     = []
 }

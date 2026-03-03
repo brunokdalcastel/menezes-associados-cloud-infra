@@ -100,24 +100,88 @@ menezes-associados-cloud-infra/
 
 ```bash
 # 1. Clone o repositório
-git clone https://github.com/brunokdalcastel/lab-azure-advocacia-infra
+git clone https://github.com/brunokdalcastel/menezes-associados-cloud-infra
+cd menezes-associados-cloud-infra
 
-# 2. Crie o Storage Account para armazenar o state (executar uma única vez)
-# Os comandos estão documentados em backend.tf na raiz do repositório
+# 2. Crie o Storage Account para armazenar o state do Terraform (executar uma única vez)
+# Este Storage Account NÃO é o de dados do escritório — é exclusivo para o tfstate
 az group create --name rg-tfstate-shared-brazilsouth-001 --location brazilsouth
-az storage account create --name sttfstatemenezes001 --resource-group rg-tfstate-shared-brazilsouth-001 --location brazilsouth --sku Standard_LRS --kind StorageV2
+az storage account create --name sttfstatemenezes001 --resource-group rg-tfstate-shared-brazilsouth-001 --location brazilsouth --sku Standard_LRS --kind StorageV2 --min-tls-version TLS1_2 --allow-blob-public-access false
 az storage container create --name tfstate --account-name sttfstatemenezes001
 
 # 3. Configure as variáveis
 cp environments/menezes/terraform.tfvars.example environments/menezes/terraform.tfvars
-# Edite terraform.tfvars com os valores reais (sharepoint_url, storage_account_name, etc.)
+# Edite o terraform.tfvars com seus valores reais — atenção para:
+#   - sharepoint_url: URL do seu tenant SharePoint
+#   - allowed_ip_ranges: adicione o IP público da sua máquina/escritório (obrigatório
+#     para acessar o Storage Account via SMB ou portal — ex: ["SEU_IP_PUBLICO/32"])
+#     Descubra seu IP público: curl ifconfig.me
+#   - schedule_start_time: deve ser sempre uma data FUTURA (mínimo 5 minutos à frente)
+#     Formato: "YYYY-MM-DDT02:00:00+00:00" com o 1º dia de um mês futuro
 
 # 4. Inicialize e aplique
 cd environments/menezes
 terraform init
 terraform plan -var-file=terraform.tfvars
 terraform apply -var-file=terraform.tfvars
+
+# 5. Pós-deploy: instale o módulo PnP.PowerShell no Automation Account
+# O runbook de tiering depende deste módulo — sem ele, o job falha na execução
+# Portal Azure → Automation Account → Módulos → Procurar na Galeria → "PnP.PowerShell"
+# Aguarde a instalação concluir (status: Available) antes da primeira execução agendada
 ```
+
+> **Aviso sobre `schedule_start_time`:** O Azure exige que o horário de início do schedule seja **sempre futuro**. A data de exemplo no `terraform.tfvars.example` pode estar expirada — atualize para o 1º dia do próximo mês antes de aplicar.
+
+> **Aviso sobre `allowed_ip_ranges`:** O Storage Account é criado com `default_action = "Deny"`. Se você não incluir seu IP público em `allowed_ip_ranges`, **não conseguirá acessar o Storage** via portal, CLI ou montagem SMB. O Automation Account acessa normalmente via Managed Identity (`bypass = ["AzureServices"]`).
+
+### Configuração do CI/CD (GitHub Actions + OIDC)
+
+O pipeline usa **Workload Identity Federation (OIDC)** — sem client secrets armazenados. Para ativar o CI/CD no seu fork:
+
+**1. Crie um App Registration no Entra ID**
+```bash
+az ad app create --display-name "sp-terraform-menezes-github"
+# Anote o Application (client) ID gerado
+```
+
+**2. Atribua permissão Contributor na Subscription**
+```bash
+az role assignment create \
+  --role "Contributor" \
+  --assignee <APPLICATION_CLIENT_ID> \
+  --scope /subscriptions/<SUBSCRIPTION_ID>
+
+# Permissão adicional para criar Role Assignments (necessária para os módulos)
+az role assignment create \
+  --role "User Access Administrator" \
+  --assignee <APPLICATION_CLIENT_ID> \
+  --scope /subscriptions/<SUBSCRIPTION_ID>
+```
+
+**3. Crie duas Federated Credentials** (uma para PRs, outra para merge na main)
+
+No portal: **Entra ID → App Registrations → seu app → Certificates & secrets → Federated credentials**
+
+| Nome | Issuer | Subject |
+|------|--------|---------|
+| `github-pr` | `https://token.actions.githubusercontent.com` | `repo:SEU_USER/menezes-associados-cloud-infra:pull_request` |
+| `github-main` | `https://token.actions.githubusercontent.com` | `repo:SEU_USER/menezes-associados-cloud-infra:ref:refs/heads/main` |
+
+**4. Configure os Secrets no repositório GitHub**
+
+Settings → Secrets and variables → Actions → New repository secret:
+
+| Secret | Valor |
+|--------|-------|
+| `AZURE_CLIENT_ID` | Application (client) ID do App Registration |
+| `AZURE_TENANT_ID` | Tenant ID do Entra ID |
+| `AZURE_SUBSCRIPTION_ID` | ID da Azure Subscription |
+
+**5. Crie o GitHub Environment "production"**
+
+Settings → Environments → New environment → nome: `production`
+(Opcional: adicione Required Reviewers para exigir aprovação manual antes do apply)
 
 ---
 
