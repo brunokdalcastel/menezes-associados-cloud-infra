@@ -36,14 +36,23 @@
 name: "Terraform Apply"
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      # Executa apenas quando arquivos relevantes são alterados
-      - "**.tf"
-      - "**.tfvars"
-      - "scripts/**.ps1"  # Runbook alterado também requer apply (Terraform faz upload)
+  # Execução manual via GitHub Actions → Terraform Apply → Run workflow
+  # O apply automático está desabilitado intencionalmente neste projeto de portfólio.
+  # Para habilitar, configure os secrets AZURE_CLIENT_ID, AZURE_TENANT_ID e
+  # AZURE_SUBSCRIPTION_ID e substitua este bloco pelo trigger de push abaixo:
+  #
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - "**.tf"
+  #     - "**.tfvars"
+  #     - "scripts/**.ps1"
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Digite 'apply' para confirmar o deploy em produção"
+        required: true
 
 # Permissões mínimas para OIDC — sem permissão de escrita em PRs (não necessário no apply)
 permissions:
