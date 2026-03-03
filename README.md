@@ -159,6 +159,8 @@ az role assignment create \
   --scope /subscriptions/<SUBSCRIPTION_ID>
 ```
 
+> **Nota sobre `User Access Administrator`:** Esta role permite criar Role Assignments em qualquer recurso da Subscription — necessária para o Terraform atribuir permissões ao Automation Account. É o padrão para IaC em lab/portfólio. Em produção real, considere restringir o escopo ao Resource Group após o primeiro deploy, ou usar uma custom role com permissão apenas para `Microsoft.Authorization/roleAssignments/write`.
+
 **3. Crie duas Federated Credentials** (uma para PRs, outra para merge na main)
 
 No portal: **Entra ID → App Registrations → seu app → Certificates & secrets → Federated credentials**
